@@ -12,7 +12,7 @@ func Router() *gin.Engine {
 	r := gin.Default()
 
 	r.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"http://localhost:7456"}, // 允許所有來源（可根據需要調整）
+		AllowOrigins:     []string{"*"}, // 允許所有來源（可根據需要調整）
 		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type"},
 		ExposeHeaders:    []string{"Content-Length"},
@@ -20,6 +20,9 @@ func Router() *gin.Engine {
 	}))
 
 	r.POST("/login", module.LoginHandler)
+	// r.POST("/GetUserInfo", module.GetUserInfoHandler)
+	r.GET("/ws", module.WsHandler)
+	r.GET("/clients", module.ListClients)
 
 	return r
 }

@@ -25,6 +25,7 @@ func main() {
 	user := &module.UserBasic{}
 	user.Username = "1"
 	user.Password = "1"
+	user.Money = 1000
 	// user.LoginTime = time.Now()
 	// user.HeartbeatTime = time.Now()
 	// user.LoginOutTime = time.Now()

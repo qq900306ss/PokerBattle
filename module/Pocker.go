@@ -28,25 +28,26 @@ func GetCard() Card {
 }
 
 func ComparePoker(player1 *PlayerInfo, player2 *PlayerInfo) *PlayerInfo {
-	if player1.Poker.value > player2.Poker.value {
-		return player1
-	}
-	if player1.Poker.value < player2.Poker.value {
-		return player2
-	}
-	// 以上是數字有結果情況
+	// if player1.Poker.value > player2.Poker.value {
+	// 	return player1
+	// }
+	// if player1.Poker.value < player2.Poker.value {
+	// 	return player2
+	// }
+	// // 以上是數字有結果情況
 
-	if suitRank[player1.Poker.suit] > suitRank[player2.Poker.suit] {
-		return player1
-	}
-	if suitRank[player1.Poker.suit] < suitRank[player2.Poker.suit] {
-		return player2
-	}
-	// 以上是數字平 花色不平結果情況
+	// if suitRank[player1.Poker.suit] > suitRank[player2.Poker.suit] {
+	// 	return player1
+	// }
+	// if suitRank[player1.Poker.suit] < suitRank[player2.Poker.suit] {
+	// 	return player2
+	// }
+	// // 以上是數字平 花色不平結果情況
 	return nil // 平手
 }
 
 func handleGame(ws *websocket.Conn, PlayerName string) {
-	player := &PlayerInfo{Name: PlayerName, Money: 1000, Poker: GetCard()}
+	player := &PlayerInfo{Name: PlayerName}
+
 	fmt.Println("player", player)
 }
