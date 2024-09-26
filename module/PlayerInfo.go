@@ -24,6 +24,7 @@ type PlayerInfo struct {
 type Message struct {
 	Event string
 	Name  string
+	Card  Card
 }
 
 func LoginHandler(c *gin.Context) { //方法

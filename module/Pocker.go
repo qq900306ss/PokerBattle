@@ -8,8 +8,8 @@ import (
 )
 
 type Card struct {
-	value int
-	suit  string
+	Value int
+	Suit  string
 }
 
 var suits = []string{"黑桃", "紅心", "方塊", "梅花"}
@@ -24,7 +24,7 @@ var suitRank = map[string]int{
 func GetCard() Card {
 	value := rand.Intn(13) + 1
 	suit := suits[rand.Intn(4)]
-	return Card{value: value, suit: suit}
+	return Card{Value: value, Suit: suit}
 }
 
 func ComparePoker(player1 *PlayerInfo, player2 *PlayerInfo) *PlayerInfo {

@@ -56,7 +56,23 @@ func WsHandler(c *gin.Context) {
 	fmt.Println("add client:", receiveData.Name)
 	rwLocker.Unlock()
 
-	ConnectOpponent(receiveData, conn)
+	ConnectOpponent(receiveData, conn) // 連線對手
+
+	status := Message{}
+
+	MyCard := GetCard()
+
+	status.Event = "可以配卡了"
+	status.Card = MyCard
+	statusJson, err := json.Marshal(status)
+
+	fmt.Println("可以配卡了", MyCard)
+	err = conn.WriteMessage(websocket.TextMessage, statusJson)
+
+	if err != nil {
+		fmt.Println("Websocket write:", err)
+		return
+	}
 
 }
 
