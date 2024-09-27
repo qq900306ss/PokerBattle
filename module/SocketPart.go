@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
@@ -56,23 +57,11 @@ func WsHandler(c *gin.Context) {
 	fmt.Println("add client:", receiveData.Name)
 	rwLocker.Unlock()
 
-	ConnectOpponent(receiveData, conn) // 連線對手
+	opponent := ConnectOpponent(receiveData, conn) // 連線對手
 
-	status := Message{}
+	time.Sleep(1 * time.Second) // 刪除等待一陣子以免衝突
 
-	MyCard := GetCard()
-
-	status.Event = "可以配卡了"
-	status.Card = MyCard
-	statusJson, err := json.Marshal(status)
-
-	fmt.Println("可以配卡了", MyCard)
-	err = conn.WriteMessage(websocket.TextMessage, statusJson)
-
-	if err != nil {
-		fmt.Println("Websocket write:", err)
-		return
-	}
+	CocosGetCard(receiveData, conn, opponent, node)
 
 }
 
@@ -92,13 +81,13 @@ func ListClients(c *gin.Context) {
 	})
 }
 
-func ConnectOpponent(receiveData PlayerInfo, conn *websocket.Conn) {
+func ConnectOpponent(receiveData PlayerInfo, conn *websocket.Conn) string {
 
 	for {
 		if len(clientMap) >= 2 {
 			fmt.Println("配對對手")
 
-			for opponent := range clientMap { //遍歷clientMap 找到對手 處理完之後退出
+			for opponent := range clientMap { //遍歷clientMap 找到對手 處理完之後退出  //感覺要考慮 三個仁 有兩個仁 進行配對時候
 				if opponent != receiveData.Name {
 					fmt.Println("找到對手")
 
@@ -108,10 +97,12 @@ func ConnectOpponent(receiveData PlayerInfo, conn *websocket.Conn) {
 					}
 					opponentInfo, err := json.Marshal(opponentData)
 					err = conn.WriteMessage(websocket.TextMessage, opponentInfo)
+
 					if err != nil {
 						fmt.Println("Websocket write:", err)
-						return
+
 					}
+
 					msg := []byte("yes")
 					clientMap[opponent].DataQueue <- msg
 
@@ -129,7 +120,7 @@ func ConnectOpponent(receiveData PlayerInfo, conn *websocket.Conn) {
 					delete(clientMap, receiveData.Name) // 刪除自己
 					fmt.Println("刪除自己", receiveData.Name)
 
-					return
+					return opponent
 					// c.JSON(http.StatusOK, gin.H{
 					// 	"opponentName": opponent,
 					// })
@@ -139,4 +130,119 @@ func ConnectOpponent(receiveData PlayerInfo, conn *websocket.Conn) {
 		}
 
 	}
+}
+
+func CocosGetCard(receiveData PlayerInfo, conn *websocket.Conn, opponent string, node *Node) {
+	rwLocker.Lock()
+	clientMap[receiveData.Name] = node
+	fmt.Println("在連線完成之後add client:", receiveData.Name)
+	rwLocker.Unlock()
+
+	status := Message{}
+
+	MyCard := GetCard()
+
+	status.Event = "可以配卡了"
+	status.Name = receiveData.Name
+	status.Card = MyCard
+
+	MyCardData := status      //封裝自己卡片資料
+	OpponentData := Message{} //封裝對手卡片資料
+
+	statusJson, err := json.Marshal(status)
+
+	if err != nil {
+		fmt.Println("json marshal:", err)
+		return
+	}
+
+	fmt.Println("可以配卡了", MyCard)
+
+	err = conn.WriteMessage(websocket.TextMessage, statusJson) //寄送自己資料
+
+	clientMap[opponent].DataQueue <- statusJson
+
+loop:
+	for {
+		select {
+		case data := <-clientMap[receiveData.Name].DataQueue:
+			{
+
+				opponentData := Message{}
+				err = json.Unmarshal(data, &opponentData)
+				if err != nil {
+					fmt.Println("在封裝對手卡片資料json unmarshal:", err)
+					return
+				}
+
+				OpponentData = opponentData //封裝對手卡片資料 這是由dataqueue 收到的資料 所以是對手的
+
+				status.Event = "收到對手傳送卡片資料"
+				status.Card.Value = opponentData.Card.Value
+				status.Card.Suit = opponentData.Card.Suit
+
+				statusJson, err = json.Marshal(status)
+				if err != nil {
+					fmt.Println(" 對手卡片資料封裝json marshal:", err)
+					return
+				}
+				fmt.Println("收到對手:", string(data), receiveData.Name, "可以解放了")
+				delete(clientMap, receiveData.Name)
+				break loop
+			}
+
+		}
+	}
+	fmt.Println("寄送對手資料給前端", string(statusJson))
+
+	err = conn.WriteMessage(websocket.TextMessage, statusJson) //寄送對手資料給前端
+
+	if err != nil {
+		fmt.Println("Websocket write:", err)
+		return
+	}
+
+	WhoWin := ComparePoker(MyCardData, OpponentData)
+
+	if WhoWin.Name == receiveData.Name {
+		status.Event = "你贏了"
+		statusJson, err = json.Marshal(status)
+		if err != nil {
+			fmt.Println("輸贏判定的封裝json marshal:", err)
+			return
+		}
+		err = conn.WriteMessage(websocket.TextMessage, statusJson) //寄送結果給前端
+		if err != nil {
+			fmt.Println("輸贏判定的傳送錯誤Websocket write:", err)
+			return
+		}
+	} else if WhoWin.Name == opponent {
+		status.Event = "你輸了"
+		statusJson, err = json.Marshal(status)
+		if err != nil {
+			fmt.Println("輸贏判定的封裝json marshal:", err)
+			return
+		}
+		err = conn.WriteMessage(websocket.TextMessage, statusJson) //寄送結果給前端
+		if err != nil {
+			fmt.Println("輸贏判定的傳送錯誤Websocket write:", err)
+			return
+		}
+	} else {
+		status.Event = "平手"
+		statusJson, err = json.Marshal(status)
+		if err != nil {
+			fmt.Println("輸贏判定的封裝json marshal:", err)
+			return
+		}
+		err = conn.WriteMessage(websocket.TextMessage, statusJson) //寄送結果給前端
+		if err != nil {
+			fmt.Println("輸贏判定的傳送錯誤Websocket write:", err)
+			return
+		}
+
+	}
+
+	return
+
 }
