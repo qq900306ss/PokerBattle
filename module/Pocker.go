@@ -28,6 +28,13 @@ func GetCard() Card {
 }
 
 func ComparePoker(player1 Message, player2 Message) Message {
+
+	if player1.Card.Value == 1 {
+		player1.Card.Value = 14
+	}
+	if player2.Card.Value == 1 {
+		player2.Card.Value = 14
+	}
 	if player1.Card.Value > player2.Card.Value {
 		return player1
 	}
