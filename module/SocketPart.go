@@ -3,6 +3,7 @@ package module
 import (
 	"encoding/json"
 	"fmt"
+	"github/qq900306ss-PokerBattle/utils"
 	"net/http"
 	"sync"
 	"time"
@@ -36,7 +37,8 @@ func WsHandler(c *gin.Context) {
 		fmt.Println("upgrade:", err)
 		return
 	}
-	defer conn.Close()
+
+	// defer conn.Close()
 
 	_, msg, err := conn.ReadMessage() // 讀取從前端發送的資料
 
@@ -156,13 +158,55 @@ func CocosGetCard(receiveData PlayerInfo, conn *websocket.Conn, opponent string,
 		return
 	}
 
-	fmt.Println("可以配卡了", MyCard)
+	fmt.Println("傳送自己牌資訊給自己", MyCard)
 
 	err = conn.WriteMessage(websocket.TextMessage, statusJson) //寄送自己資料
 
-	clientMap[opponent].DataQueue <- statusJson
+	Bet := PlayerInfo{}
 
-loop:
+	for { //讀取下注金額
+
+		_, msg, err := conn.ReadMessage() // 讀取從前端發送的資料
+
+		if err != nil {
+			fmt.Println(" 讀取下注資料錯誤Websocket read:", err)
+			return
+		}
+
+		if err := json.Unmarshal(msg, &Bet); err != nil {
+			fmt.Println(" 在下注解析json出錯unmarshal:", err)
+			return
+		}
+
+		if Bet.Name == "" {
+			fmt.Println(receiveData.Name, "放棄下注")
+			status.Event = "放棄下注"
+			status.Name = ""
+
+			statusJson, err = json.Marshal(status)
+
+			clientMap[opponent].DataQueue <- statusJson
+
+			error := utils.DB.Exec("UPDATE user_basics SET money = money - 10 WHERE username = ?", receiveData.Name)
+			if error.Error != nil {
+				fmt.Println(receiveData.Name, "在放棄下的Mysql更新錯誤:", error)
+			}
+
+		} else {
+			fmt.Println("收到下注資料:", Bet.Name, Bet.Money)
+
+		}
+
+		break
+
+	}
+	if clientMap[opponent] != nil {
+
+		clientMap[opponent].DataQueue <- statusJson
+
+	}
+
+loop: //後端部分拿到對手資料跟如果收到放棄下注通知前端
 	for {
 		select {
 		case data := <-clientMap[receiveData.Name].DataQueue:
@@ -173,6 +217,24 @@ loop:
 				if err != nil {
 					fmt.Println("在封裝對手卡片資料json unmarshal:", err)
 					return
+				}
+
+				if opponentData.Event == "放棄下注" {
+					fmt.Println("對手放棄下注")
+					status.Event = "對手放棄下注了"
+					statusJson, err = json.Marshal(status)
+					if err != nil {
+						fmt.Println(" 對手放棄下注的封裝json marshal錯誤:", err)
+						return
+					}
+					err = conn.WriteMessage(websocket.TextMessage, statusJson)
+					if err != nil {
+						fmt.Println(" 對手放棄下注的Websocket write錯誤:", err)
+						return
+					}
+
+					delete(clientMap, receiveData.Name)
+					return //如果對手放棄下注 就直接結束
 				}
 
 				OpponentData = opponentData //封裝對手卡片資料 這是由dataqueue 收到的資料 所以是對手的
@@ -195,6 +257,25 @@ loop:
 	}
 	fmt.Println("寄送對手資料給前端", string(statusJson))
 
+	if Bet.Name == "" {
+		status.Event = "你放棄下注"
+		statusJson, err = json.Marshal(status)
+		if err != nil {
+			fmt.Println(" 你放棄下注的封裝json marshal錯誤:", err)
+			return
+		}
+		err = conn.WriteMessage(websocket.TextMessage, statusJson) //寄送對手資料給前端
+
+		if err != nil {
+			fmt.Println("你放棄下注Websocket write錯誤:", err)
+			return
+		}
+
+		delete(clientMap, receiveData.Name)
+
+		return
+	}
+
 	err = conn.WriteMessage(websocket.TextMessage, statusJson) //寄送對手資料給前端
 
 	if err != nil {
@@ -206,6 +287,16 @@ loop:
 
 	if WhoWin.Name == receiveData.Name {
 		status.Event = "你贏了"
+		Bet.Money *= 2
+
+		utils.DB.Where("username = ?").First(&Bet.Name)
+
+		fmt.Println("檢查BET.name", Bet.Name, "尾巴", Bet.Money)
+		error := utils.DB.Exec("UPDATE user_basics SET money = money + ? WHERE username = ?", Bet.Money, Bet.Name)
+		if error.Error != nil {
+			fmt.Println("有啥錯:", error)
+		}
+
 		statusJson, err = json.Marshal(status)
 		if err != nil {
 			fmt.Println("輸贏判定的封裝json marshal:", err)
@@ -218,6 +309,10 @@ loop:
 		}
 	} else if WhoWin.Name == opponent {
 		status.Event = "你輸了"
+		error := utils.DB.Exec("UPDATE user_basics SET money = money - ? WHERE username = ?", Bet.Money, Bet.Name)
+		if error.Error != nil {
+			fmt.Println("有啥錯:", error)
+		}
 		statusJson, err = json.Marshal(status)
 		if err != nil {
 			fmt.Println("輸贏判定的封裝json marshal:", err)
@@ -228,8 +323,14 @@ loop:
 			fmt.Println("輸贏判定的傳送錯誤Websocket write:", err)
 			return
 		}
+
 	} else {
 		status.Event = "平手"
+
+		error := utils.DB.Exec("UPDATE user_basics SET money = money - 10 WHERE username = ?", Bet.Name)
+		if error.Error != nil {
+			fmt.Println("有啥錯:", error)
+		}
 		statusJson, err = json.Marshal(status)
 		if err != nil {
 			fmt.Println("輸贏判定的封裝json marshal:", err)
@@ -242,6 +343,9 @@ loop:
 		}
 
 	}
+
+	time.Sleep(2 * time.Second)         //最後等個兩秒緩衝
+	delete(clientMap, receiveData.Name) // 刪除自己
 
 	return
 

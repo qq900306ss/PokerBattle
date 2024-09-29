@@ -36,10 +36,10 @@ func ComparePoker(player1 Message, player2 Message) Message {
 	}
 	// 以上是數字有結果情況
 
-	if suitRank[player1.Card.Suit] > suitRank[player2.Card.Suit] {
+	if suitRank[player1.Card.Suit] < suitRank[player2.Card.Suit] {
 		return player1
 	}
-	if suitRank[player1.Card.Suit] < suitRank[player2.Card.Suit] {
+	if suitRank[player1.Card.Suit] > suitRank[player2.Card.Suit] {
 		return player2
 	}
 	// 以上是數字平 花色不平結果情況
